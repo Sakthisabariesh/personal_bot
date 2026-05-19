@@ -3133,7 +3133,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde_json",
  "tokio",
- "toml 0.8.2",
+ "toml 1.1.2+spec-1.1.0",
 ]
 
 [[package]]
@@ -13016,7 +13016,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
- "toml 0.8.2",
+ "toml 1.1.2+spec-1.1.0",
  "tower-http",
  "zeroclaw-gateway",
 ]

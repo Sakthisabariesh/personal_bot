@@ -23,4 +23,4 @@ tokio = { version = "1.50", default-features = false, features = ["rt-multi-thre
 libc = "0.2"
 
 [dev-dependencies]
-toml = "1.0"
+toml = "1.1"

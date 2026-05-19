@@ -65,7 +65,7 @@ rusqlite = { version = "0.37", features = ["bundled"] }
 # Misc
 chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
 parking_lot = "0.12"
-toml = "1.0"
+toml = "1.1"
 toml_edit = "0.25"
 tracing = { version = "0.1", default-features = false }
 rustls-pemfile = "2"
