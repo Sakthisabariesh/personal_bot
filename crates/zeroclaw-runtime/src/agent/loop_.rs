@@ -2520,6 +2520,9 @@ pub async fn run(
     } else {
         None
     };
+    if let Some(ref msg) = message {
+        crate::agent::system_prompt::save_last_query(&config.workspace_dir, msg);
+    }
     let native_tools = provider.supports_native_tools();
     let mut system_prompt = crate::agent::system_prompt::build_system_prompt_with_mode_and_autonomy(
         &config.workspace_dir,
@@ -2579,7 +2582,7 @@ pub async fn run(
 
     // Save the base system prompt before any thinking modifications so
     // the interactive loop can restore it between turns.
-    let base_system_prompt = system_prompt.clone();
+    let mut base_system_prompt = system_prompt.clone();
 
     if let Some(msg) = message {
         // ── Parse thinking directive from user message ─────────
@@ -2876,6 +2879,29 @@ pub async fn run(
                     continue;
                 }
                 _ => {}
+            }
+
+            // Rebuild the system prompt dynamically based on intent/mode classification
+            crate::agent::system_prompt::save_last_query(&config.workspace_dir, &user_input);
+            let updated_system_prompt = crate::agent::system_prompt::build_system_prompt_with_mode_and_autonomy(
+                &config.workspace_dir,
+                &model_name,
+                &tool_descs,
+                &skills,
+                Some(&config.identity),
+                bootstrap_max_chars,
+                Some(&config.autonomy),
+                native_tools,
+                config.skills.prompt_injection_mode,
+                config.agent.compact_context,
+                config.agent.max_system_prompt_chars,
+            );
+            base_system_prompt = updated_system_prompt.clone();
+            system_prompt = updated_system_prompt;
+            if let Some(sys_msg) = history.first_mut() {
+                if sys_msg.role == "system" {
+                    sys_msg.content = system_prompt.clone();
+                }
             }
 
             // ── Parse thinking directive from interactive input ───

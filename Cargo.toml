@@ -258,17 +258,10 @@ agent-runtime = [
     "dep:ratatui", "dep:crossterm",
     "dep:tokio-tungstenite", "dep:tokio-socks", "dep:hostname",
     "dep:rustls", "dep:rustls-pemfile", "dep:rustls-pki-types", "dep:tokio-rustls", "dep:webpki-roots",
-    "dep:lettre", "dep:mail-parser", "dep:async-imap",
-    "channel-email", "channel-telegram", "channel-lark",
-    "channel-discord", "channel-slack", "channel-signal",
-    "channel-mattermost", "channel-irc", "channel-imessage",
-    "channel-dingtalk", "channel-qq", "channel-bluesky",
-    "channel-twitter", "channel-reddit", "channel-notion",
-    "channel-linq", "channel-wati", "channel-nextcloud",
-    "channel-mochat", "channel-wecom", "channel-clawdtalk",
-    "channel-webhook", "channel-acp-server", "channel-whatsapp-cloud",
-    "channel-voice-call",
+    "channel-telegram",
+    "channel-discord",
 ]
+
 
 # Major subsystems — each forwards to exactly ONE crate
 gateway = [

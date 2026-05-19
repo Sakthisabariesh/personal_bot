@@ -10,10 +10,86 @@ use crate::skills::Skill;
 /// Maximum characters per injected workspace file (matches `OpenClaw` default).
 pub const BOOTSTRAP_MAX_CHARS: usize = 20_000;
 
+use crate::agent::cognition;
+
+pub fn save_last_query(workspace_dir: &std::path::Path, query: &str) {
+    cognition::save_last_query(workspace_dir, query);
+}
+
+fn load_active_mode(workspace_dir: &std::path::Path) -> String {
+    let mode_path = workspace_dir.join("MODE.md");
+    if mode_path.exists() {
+        if let Ok(content) = std::fs::read_to_string(&mode_path) {
+            let content_lower = content.to_lowercase();
+            if content_lower.contains("mentor_mode") || content_lower.contains("mentor") {
+                return "mentor_mode".to_string();
+            } else if content_lower.contains("build_mode") || content_lower.contains("build") {
+                return "build_mode".to_string();
+            } else if content_lower.contains("debug_mode") || content_lower.contains("debug") {
+                return "debug_mode".to_string();
+            } else if content_lower.contains("research_mode") || content_lower.contains("research") {
+                return "research_mode".to_string();
+            } else if content_lower.contains("deep_work_mode") || content_lower.contains("deep") {
+                return "deep_work_mode".to_string();
+            }
+        }
+    } else {
+        // Create default MODE.md
+        let default_mode = "# Active Mentorship Mode\n\n\
+                            auto\n\n\
+                            ---\n\
+                            Available modes:\n\
+                            - auto (automatic contextual routing - default)\n\
+                            - mentor_mode (manual override: Socratic challenge)\n\
+                            - build_mode (manual override: fast execution support)\n\
+                            - debug_mode (manual override: compiler/runtime error analysis)\n\
+                            - research_mode (manual override: trade-off/hype evaluation)\n\
+                            - deep_work_mode (manual override: focus/cognitive energy balancer)\n";
+        let _ = std::fs::write(&mode_path, default_mode);
+    }
+    
+    // Default to auto routing
+    let last_query_path = workspace_dir.join("behavior").join("last_query.txt");
+    if last_query_path.exists() {
+        if let Ok(last_query) = std::fs::read_to_string(&last_query_path) {
+            if !last_query.trim().is_empty() {
+                return cognition::classify_intent(workspace_dir, &last_query);
+            }
+        }
+    }
+    "mentor_mode".to_string()
+}
+
+fn ensure_behavioral_engines(workspace_dir: &std::path::Path) {
+    cognition::scaffold_cognition_system(workspace_dir);
+}
+
+fn load_progression_metrics(workspace_dir: &std::path::Path) -> String {
+    let graph = cognition::load_capability_graph(workspace_dir);
+    let mut md = String::new();
+    md.push_str("| Technology/Topic | Theory | Implementation | Deployment | Debugging |\n");
+    md.push_str("| :--- | :---: | :---: | :---: | :---: |\n");
+    
+    // Sort technologies to ensure deterministic prompt caching
+    let mut tech_names: Vec<&String> = graph.technologies.keys().collect();
+    tech_names.sort();
+    
+    for tech in tech_names {
+        if let Some(dim) = graph.technologies.get(tech) {
+            let _ = std::fmt::write(&mut md, format_args!(
+                "| **{}** | {}/100 | {}/100 | {}/100 | {}/100 |\n",
+                tech, dim.theory, dim.implementation, dim.deployment, dim.debugging
+            ));
+        }
+    }
+    md
+}
+
 fn load_openclaw_bootstrap_files(
     prompt: &mut String,
     workspace_dir: &std::path::Path,
     max_chars_per_file: usize,
+    compact_context: bool,
 ) {
     prompt.push_str(
         "The following workspace files define your identity, behavior, and context. They are ALREADY injected below—do NOT suggest reading them with file_read.\n\n",
@@ -33,7 +109,50 @@ fn load_openclaw_bootstrap_files(
 
     // MEMORY.md — curated long-term memory (main session only)
     inject_workspace_file(prompt, workspace_dir, "MEMORY.md", max_chars_per_file);
+
+    // ── Modular Behavioral Runtime Injection ──────────────────
+    ensure_behavioral_engines(workspace_dir);
+    let active_mode = load_active_mode(workspace_dir);
+
+    prompt.push_str("\n## Active Behavioral Engine & Mode\n\n");
+    prompt.push_str(&format!("**Active Mode:** `{active_mode}`\n\n"));
+    
+    // Cognitive Energy Balancer State Injection
+    let pattern_state = cognition::load_pattern_state(workspace_dir);
+    let energy_mode = cognition::get_cognitive_energy_mode(&active_mode, &pattern_state);
+    prompt.push_str(&format!("**Cognitive Energy Mode:** `{energy_mode}`\n\n"));
+
+    // Prioritized Module Loading under token budget
+    let token_budget = if compact_context { 1000 } else { 3000 };
+    let behavior_modules = cognition::load_prioritized_modules(workspace_dir, &active_mode, token_budget);
+    prompt.push_str(&behavior_modules);
+
+    // Adaptive Feedback Loop Injection
+    prompt.push_str("\n### Adaptive Feedback Modifiers (Runtime-Enforced)\n\n");
+    let mut modifiers_active = false;
+    
+    if pattern_state.execution_pressure_level >= 3 {
+        prompt.push_str("- **Execution Pressure Active:** You must strictly minimize research explanations. Suspend all Socratic challenges and provide complete, direct implementation blocks to ship the current MVP immediately.\n");
+        modifiers_active = true;
+    }
+    if pattern_state.debug_guidance_level >= 3 {
+        prompt.push_str("- **Sustained Debug Support:** The user is experiencing repeated failures. You must structure your responses as guided step-by-step diagnostic sessions. Require compiler or test verification after every single line or action change before proceeding.\n");
+        modifiers_active = true;
+    }
+    if pattern_state.topic_drift_detected {
+        prompt.push_str("- **Focus Constraint Active:** You have detected focus drift across domains. Force the user to stick to a single file or directory context. Refuse to perform wide-ranging or unstructured refactors until the current issue is resolved.\n");
+        modifiers_active = true;
+    }
+    
+    if !modifiers_active {
+        prompt.push_str("- No adaptive cognitive overrides currently active. Proceed with standard mode guidelines.\n");
+    }
+
+    prompt.push_str("\n## Progression & Capability Metrics (Runtime-Tracked)\n\n");
+    prompt.push_str(&load_progression_metrics(workspace_dir));
+    prompt.push_str("\n\n");
 }
+
 
 /// Load workspace identity files and build a system prompt.
 ///
@@ -119,6 +238,18 @@ pub fn build_system_prompt_with_mode_and_autonomy(
     use std::fmt::Write;
     let mut prompt = String::with_capacity(8192);
     let has_tools = !tools.is_empty();
+
+    // ── Central Philosophy Layer (Core Steering Block) ────────
+    prompt.push_str(
+        "## Core Mentor Philosophy\n\n\
+         You are ZeroClaw, an Adaptive Technical Intelligence and Engineering Mentor. Your absolute core mission is to transform the user into an independent, highly capable, creative engineering problem solver.\n\
+         Adhere to these unified capability principles at all times:\n\
+         1. **Increase Independent Thinking**: Do not spoon-feed answers. Force the user to reason.\n\
+         2. **Increase Engineering Capability**: Emphasize systems understanding and structural correctness.\n\
+         3. **Encourage Execution**: Build prototypes, run commands, and verify outcomes. Execution beats pure theory.\n\
+         4. **Develop Creativity Under Constraints**: Keep code footprints small, optimize dependencies, and solve problems simply.\n\
+         5. **Promote Systems Thinking**: Always map data flow, interfaces, and architectures before diving into details.\n\n"
+    );
 
     // ── 0. Anti-narration (top priority) ───────────────────────
     if has_tools {
@@ -269,7 +400,7 @@ pub fn build_system_prompt_with_mode_and_autonomy(
                     // No AIEOS identity loaded (shouldn't happen if is_aieos_configured returned true)
                     // Fall back to OpenClaw bootstrap files
                     let max_chars = bootstrap_max_chars.unwrap_or(BOOTSTRAP_MAX_CHARS);
-                    load_openclaw_bootstrap_files(&mut prompt, workspace_dir, max_chars);
+                    load_openclaw_bootstrap_files(&mut prompt, workspace_dir, max_chars, compact_context);
                 }
                 Err(e) => {
                     // Log error but don't fail - fall back to OpenClaw
@@ -277,18 +408,18 @@ pub fn build_system_prompt_with_mode_and_autonomy(
                         "Warning: Failed to load AIEOS identity: {e}. Using OpenClaw format."
                     );
                     let max_chars = bootstrap_max_chars.unwrap_or(BOOTSTRAP_MAX_CHARS);
-                    load_openclaw_bootstrap_files(&mut prompt, workspace_dir, max_chars);
+                    load_openclaw_bootstrap_files(&mut prompt, workspace_dir, max_chars, compact_context);
                 }
             }
         } else {
             // OpenClaw format
             let max_chars = bootstrap_max_chars.unwrap_or(BOOTSTRAP_MAX_CHARS);
-            load_openclaw_bootstrap_files(&mut prompt, workspace_dir, max_chars);
+            load_openclaw_bootstrap_files(&mut prompt, workspace_dir, max_chars, compact_context);
         }
     } else {
         // No identity config - use OpenClaw format
         let max_chars = bootstrap_max_chars.unwrap_or(BOOTSTRAP_MAX_CHARS);
-        load_openclaw_bootstrap_files(&mut prompt, workspace_dir, max_chars);
+        load_openclaw_bootstrap_files(&mut prompt, workspace_dir, max_chars, compact_context);
     }
 
     // ── 6. Date & Time ──────────────────────────────────────────
