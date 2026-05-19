@@ -29,7 +29,7 @@ RUN --mount=type=cache,id=zeroclaw-cargo-registry,target=/usr/local/cargo/regist
 FROM rust:1.94-slim@sha256:da9dab7a6b8dd428e71718402e97207bb3e54167d37b5708616050b1e8f60ed6 AS builder
 
 WORKDIR /app
-ARG ZEROCLAW_CARGO_FEATURES="channel-lark,whatsapp-web"
+ARG ZEROCLAW_CARGO_FEATURES="channel-telegram,channel-discord"
 
 # Install build dependencies
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -178,31 +178,58 @@ HEALTHCHECK --interval=60s --timeout=10s --retries=3 --start-period=10s \
 ENTRYPOINT ["zeroclaw"]
 CMD ["daemon"]
 
-# ── Stage 3: Production Runtime (Distroless) ─────────────────
-FROM gcr.io/distroless/cc-debian13:nonroot@sha256:84fcd3c223b144b0cb6edc5ecc75641819842a9679a3a58fd6294bec47532bf7 AS release
+# ── Stage 3: Production Runtime (Debian with shell, Hugging Face-compatible) ──
+FROM debian:bookworm-slim AS release
+
+# Install essential tools for agent shell operations
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        bash \
+        ca-certificates \
+        curl \
+        git \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/zeroclaw /usr/local/bin/zeroclaw
 COPY --from=builder /zeroclaw-data /zeroclaw-data
-# Install the dashboard at /usr/share/zeroclawlabs/web/dist (outside the
-# documented /zeroclaw-data mount) so user volumes do not shadow it (#6400).
 COPY --from=web-builder /app/web/dist /usr/share/zeroclawlabs/web/dist
+
+# Setup non-root home directory for user 1000 (Hugging Face Spaces default)
+RUN mkdir -p /home/user/app /home/user/.zeroclaw /home/user/workspace && \
+    chown -R 1000:1000 /home/user
+
+# Setup default config
+RUN printf '%s\n' \
+    'workspace_dir = "/home/user/workspace"' \
+    'config_path = "/home/user/.zeroclaw/config.toml"' \
+    'api_key = ""' \
+    'default_provider = "openrouter"' \
+    'default_model = "anthropic/claude-3-5-sonnet"' \
+    'default_temperature = 0.7' \
+    '' \
+    '[gateway]' \
+    'port = 7860' \
+    'host = "0.0.0.0"' \
+    'allow_public_bind = true' \
+    'web_dist_dir = "/usr/share/zeroclawlabs/web/dist"' \
+    '' \
+    '[autonomy]' \
+    'level = "supervised"' \
+    'auto_approve = ["file_read", "file_write", "file_edit", "memory_recall", "memory_store", "web_search_tool", "web_fetch", "calculator", "glob_search", "content_search", "image_info", "weather", "git_operations"]' \
+    > /home/user/.zeroclaw/config.toml && \
+    chown 1000:1000 /home/user/.zeroclaw/config.toml
 
 # Environment setup
 # Ensure UTF-8 locale so CJK / multibyte input is handled correctly
 ENV LANG=C.UTF-8
-ENV ZEROCLAW_WORKSPACE=/zeroclaw-data/workspace
-ENV HOME=/zeroclaw-data
-# Default provider and model are set in config.toml, not here,
-# so config file edits are not silently overridden
-#ENV PROVIDER=
-ENV ZEROCLAW_GATEWAY_PORT=42617
+ENV ZEROCLAW_WORKSPACE=/home/user/workspace
+ENV HOME=/home/user
+ENV ZEROCLAW_GATEWAY_PORT=7860
+ENV ZEROCLAW_ALLOW_PUBLIC_BIND=true
+ENV PROVIDER=openrouter
 
-# API_KEY must be provided at runtime!
+WORKDIR /home/user/app
+USER 1000
+EXPOSE 7860
 
-WORKDIR /zeroclaw-data
-USER 65534:65534
-EXPOSE 42617
-HEALTHCHECK --interval=60s --timeout=10s --retries=3 --start-period=10s \
-    CMD ["zeroclaw", "status", "--format=exit-code"]
 ENTRYPOINT ["zeroclaw"]
 CMD ["daemon"]
