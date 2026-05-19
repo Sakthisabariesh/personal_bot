@@ -32,7 +32,7 @@ impl Default for CapabilityGraph {
     fn default() -> Self {
         let mut tech = HashMap::new();
         tech.insert("rust".to_string(), TechDimension { theory: 20, implementation: 15, deployment: 10, debugging: 10 });
-        tech.insert("docker".to_string(), TechDimension { theory: 10, implementation: 5, deployment: 5, debugging: 5 });
+        tech.insert("docker".to_string(), TechDimension { theory: 15, implementation: 10, deployment: 5, debugging: 5 });
         tech.insert("git".to_string(), TechDimension { theory: 30, implementation: 25, deployment: 15, debugging: 20 });
         Self { technologies: tech }
     }
@@ -213,6 +213,13 @@ pub fn scaffold_cognition_system(workspace_dir: &Path) {
           #### Research Tradeoff Mapping\n\
           - Map latency, licensing, maintainability, and vendor lock-in trade-offs.\n"),
           
+        ("research_engine/comparisons.md",
+         "---\nname: comparisons\npriority: 6\ncontexts: [research]\ntoken_cost: 140\ndependencies: []\n---\n\
+          #### Comparative Framework Rules\n\
+          - Avoid generic 'A vs B' lists.\n\
+          - Use structured feature matrices mapping security, complexity, and resource footprint.\n\
+          - Focus on ecosystem support, integration effort, and operational complexity.\n"),
+
         ("focus_engine/domains.md",
          "---\nname: domains\npriority: 8\ncontexts: [focus]\ntoken_cost: 120\ndependencies: []\n---\n\
           #### Focus Domain Isolation\n\
